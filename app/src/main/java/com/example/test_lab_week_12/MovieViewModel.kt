@@ -4,28 +4,34 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.test_lab_week_12.model.Movie
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class MovieViewModel(
     private val movieRepository: MovieRepository
 ) : ViewModel() {
 
-    // StateFlow for movies
-    private val _popularMovies = MutableStateFlow<List<Movie>>(emptyList())
-    val popularMovies: StateFlow<List<Movie>> = _popularMovies
-
-    // StateFlow for error
+    private val _movies = MutableStateFlow<List<Movie>>(emptyList())
     private val _error = MutableStateFlow("")
+
+    // ✅ FILTER & SORT DI SINI
+    val popularMovies: StateFlow<List<Movie>> =
+        _movies
+            .map { movies ->
+                movies.sortedByDescending { it.popularity }
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = emptyList()
+            )
+
     val error: StateFlow<String> = _error
 
     init {
         fetchPopularMovies()
     }
 
-    // fetch movies from the API
     private fun fetchPopularMovies() {
         viewModelScope.launch(Dispatchers.IO) {
             movieRepository.fetchMovies()
@@ -33,7 +39,7 @@ class MovieViewModel(
                     _error.value = "An exception occurred: ${e.message}"
                 }
                 .collect { movies ->
-                    _popularMovies.value = movies
+                    _movies.value = movies
                 }
         }
     }
