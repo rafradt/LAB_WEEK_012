@@ -3,14 +3,20 @@ package com.example.test_lab_week_12
 import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.RecyclerView
 import com.example.test_lab_week_12.model.Movie
 import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.launch
 import java.util.Calendar
 
 class MainActivity : AppCompatActivity() {
+
+    private lateinit var recyclerView: RecyclerView
 
     private val movieAdapter by lazy {
         MovieAdapter(object : MovieAdapter.MovieClickListener {
@@ -24,7 +30,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val recyclerView: RecyclerView = findViewById(R.id.movie_list)
+        recyclerView = findViewById(R.id.movie_list)
         recyclerView.adapter = movieAdapter
 
         val movieRepository =
@@ -39,21 +45,40 @@ class MainActivity : AppCompatActivity() {
             }
         )[MovieViewModel::class.java]
 
-        movieViewModel.popularMovies.observe(this) { popularMovies ->
-            val currentYear = Calendar.getInstance()
-                .get(Calendar.YEAR)
-                .toString()
+        // fetch movies from the API
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
 
-            movieAdapter.addMovies(
-                popularMovies
-                    .filter { it.releaseDate?.startsWith(currentYear) == true }
-                    .sortedByDescending { it.popularity }
-            )
-        }
+                // collect movies
+                launch {
+                    movieViewModel.popularMovies.collect { movies ->
+                        val currentYear =
+                            Calendar.getInstance()
+                                .get(Calendar.YEAR)
+                                .toString()
 
-        movieViewModel.error.observe(this) { error ->
-            if (error.isNotEmpty()) {
-                Snackbar.make(recyclerView, error, Snackbar.LENGTH_LONG).show()
+                        movieAdapter.addMovies(
+                            movies
+                                .filter {
+                                    it.releaseDate?.startsWith(currentYear) == true
+                                }
+                                .sortedByDescending { it.popularity }
+                        )
+                    }
+                }
+
+                // collect error
+                launch {
+                    movieViewModel.error.collect { error ->
+                        if (error.isNotEmpty()) {
+                            Snackbar.make(
+                                recyclerView,
+                                error,
+                                Snackbar.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }
             }
         }
     }
